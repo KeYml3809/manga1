@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MangaVerse - Поиск MangaDex & CMS Своей Манги</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            700: '#6d28d9',
+                            accent: '#06b6d4'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        /* Кастомный скроллбар */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6d28d9;
+        }
+
+        /* Псевдо-полноэкранный режим */
+        .pseudo-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background-color: #020617 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow-y: auto !important;
+            border-radius: 0 !important;
+        }
+
+        /* Плавное скрытие контролов в полноэкранном режиме */
+        .fullscreen-controls-hide {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-100%);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .fullscreen-controls-show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-violet-600 selection:text-white pb-16 sm:pb-0">
+
+    <div id="app" class="flex flex-col min-h-screen">
+        <!-- Верхняя шапка сайта (Скрывается в читалке на мобильных) -->
+        <header v-if="currentView !== 'reader'" class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <!-- Логотип -->
+                <div class="flex items-center space-x-3 cursor-pointer" @click="setView('catalog')">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                        <i class="fa-solid fa-book-open text-xl text-white"></i>
+                    </div>
+                    <div>
+                        <span class="text-xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent block leading-none">
+                            MangaVerse
+                        </span>
+                        <span class="text-[10px] text-slate-400 tracking-wider uppercase font-semibold">MangaDex + CMS</span>
+                    </div>
+                </div>
+
+                <!-- Десктопная навигация -->
+                <nav class="hidden sm:flex items-center space-x-3">
+                    <button @click="setView('catalog')" 
+                            :class="currentView === 'catalog' ? 'bg-slate-800 text-violet-400 border border-violet-500/30' : 'text-slate-400 hover:text-white'"
+                            class="px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-2">
+                        <i class="fa-solid fa-compass"></i>
+                        <span>Каталог</span>
+                    </button>
+
+                    <button @click="setView('my_manga')" 
+                            :class="currentView === 'my_manga' ? 'bg-slate-800 text-violet-400 border border-violet-500/30' : 'text-slate-400 hover:text-white'"
+                            class="px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-2">
+                        <i class="fa-solid fa-layer-group text-cyan-400"></i>
+                        <span>Моя Манга</span>
+                    </button>
+                    
+                    <button @click="setView('favorites')" 
+                            :class="currentView === 'favorites' ? 'bg-slate-800 text-violet-400 border border-violet-500/30' : 'text-slate-400 hover:text-white'"
+                            class="px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center space-x-2 relative">
+                        <i class="fa-solid fa-bookmark text-amber-400"></i>
+                        <span>Закладки</span>
+                        <span v-if="favorites.length > 0" class="ml-1 px-1.5 py-0.5 text-xs bg-violet-600 text-white rounded-full">
+                            {{ favorites.length }}
+                        </span>
+                    </button>
+
+                    <button @click="setView('admin')" 
+                            :class="currentView === 'admin' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'bg-slate-800/80 text-violet-400 hover:bg-slate-800 border border-violet-500/30'"
+                            class="px-3.5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center space-x-2">
+                        <i class="fa-solid fa-gear"></i>
+                        <span>Админка / CMS</span>
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Главный Контент -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+
+            <!-- 1. КАТАЛОГ / МОЯ МАНГА / ЗАКЛАДКИ -->
+            <section v-if="['catalog', 'my_manga', 'favorites'].includes(currentView)">
+                <!-- Поиск и переключение режимов источника -->
+                <div class="mb-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <h1 class="text-xl sm:text-2xl font-bold text-slate-100">
+                                <span v-if="currentView === 'catalog'">MangaDex Каталог</span>
+                                <span v-else-if="currentView === 'my_manga'">Пользовательская Манга</span>
+                                <span v-else>Мои Закладки</span>
+                            </h1>
+                            <span v-if="currentView === 'catalog'" class="text-xs bg-violet-950 text-violet-300 border border-violet-800/50 px-2.5 py-1 rounded-full">
+                                API Live
+                            </span>
+                        </div>
+
+                        <!-- Поиск -->
+                        <div class="relative w-full sm:w-80">
+                            <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" 
+                                   v-model="searchQuery" 
+                                   @keyup.enter="currentView === 'catalog' ? fetchMangaDexList() : null"
+                                   placeholder="Поиск (Enter для поиска в MangaDex)..." 
+                                   class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-10 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-all">
+                            <button v-if="searchQuery" @click="searchQuery = ''; currentView === 'catalog' ? fetchMangaDexList() : null" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Состояние Загрузки -->
+                <div v-if="isLoading" class="text-center py-20">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-violet-500 mb-3 block"></i>
+                    <p class="text-slate-400 text-sm">Загрузка данных манги...</p>
+                </div>
+
+                <!-- Сетка Манги -->
+                <div v-else-if="displayedMangaList.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-6">
+                    <div v-for="manga in displayedMangaList" 
+                         :key="manga.id"
+                         @click="openMangaDetails(manga)"
+                         class="group relative bg-slate-900 rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800 hover:border-violet-500/50 transition-all duration-300 active:scale-95 sm:hover:-translate-y-1 cursor-pointer flex flex-col">
+                        
+                        <!-- Обложка -->
+                        <div class="aspect-[3/4] w-full overflow-hidden bg-slate-950 relative">
+                            <img :src="manga.cover" 
+                                 :alt="manga.title" 
+                                 @error="$event.target.src='https://placehold.co/400x600/1e293b/8b5cf6?text=Нет+Обложки'"
+                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                            
+                            <!-- Кнопка Закладки -->
+                            <button @click.stop="toggleFavorite(manga.id)" 
+                                    class="absolute top-2 right-2 w-8 h-8 rounded-full bg-slate-950/80 backdrop-blur flex items-center justify-center text-slate-300 hover:text-amber-400 active:scale-90 transition-all z-10">
+                                <i :class="isFavorite(manga.id) ? 'fa-solid fa-bookmark text-amber-400' : 'fa-regular fa-bookmark'"></i>
+                            </button>
+
+                            <span class="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur text-[10px] sm:text-[11px] text-slate-300 font-medium">
+                                {{ manga.isCustom ? 'Пользовательская' : (manga.chapters ? manga.chapters.length + ' глав' : 'MangaDex API') }}
+                            </span>
+                        </div>
+
+                        <!-- Описание -->
+                        <div class="p-2.5 sm:p-4 flex-1 flex flex-col justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-100 text-xs sm:text-sm line-clamp-1 group-hover:text-violet-400 transition-colors">
+                                    {{ manga.title }}
+                                </h3>
+                                <p class="text-[11px] sm:text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                    <i class="fa-solid fa-user text-[10px] text-slate-500"></i>
+                                    <span class="truncate">{{ manga.author || 'Не указан' }}</span>
+                                </p>
+                            </div>
+
+                            <div class="flex flex-wrap gap-1 mt-3">
+                                <span v-for="tag in (manga.tags || []).slice(0, 2)" 
+                                      :key="tag" 
+                                      class="px-2 py-0.5 bg-slate-800 rounded text-[10px] text-violet-300">
+                                    {{ tag }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Пустой результат -->
+                <div v-else class="text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800/80">
+                    <i class="fa-solid fa-box-open text-4xl text-slate-600 mb-3"></i>
+                    <p class="text-slate-400 font-medium text-sm">Манга не найдена</p>
+                    <button v-if="currentView === 'my_manga'" @click="openAdminModal()" class="mt-4 px-4 py-2 bg-violet-600 text-white text-xs font-semibold rounded-xl">
+                        + Добавить первую мангу
+                    </button>
+                </div>
+            </section>
+
+            <!-- 2. ДЕТАЛИ МАНГИ -->
+            <section v-if="currentView === 'details' && selectedManga" class="space-y-6 sm:space-y-8">
+                <!-- Кнопка Назад -->
+                <button @click="setView('catalog')" class="inline-flex items-center space-x-2 text-sm text-slate-400 hover:text-violet-400 transition-colors">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Назад в каталог</span>
+                </button>
+
+                <!-- Карточка информации -->
+                <div class="bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-8 border border-slate-800 flex flex-col sm:flex-row gap-6 relative overflow-hidden">
+                    <div class="w-36 sm:w-64 mx-auto sm:mx-0 flex-shrink-0">
+                        <div class="aspect-[3/4] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
+                            <img :src="selectedManga.cover" 
+                                 :alt="selectedManga.title" 
+                                 @error="$event.target.src='https://placehold.co/400x600/1e293b/8b5cf6?text=Нет+Обложки'"
+                                 class="w-full h-full object-cover">
+                        </div>
+                    </div>
+
+                    <div class="flex-1 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h1 class="text-xl sm:text-3xl font-extrabold text-white">{{ selectedManga.title }}</h1>
+                                        <span v-if="selectedManga.isCustom" class="px-2 py-0.5 text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/50 rounded">Своя</span>
+                                    </div>
+                                    <p class="text-slate-400 text-xs sm:text-sm mt-1">Автор: <span class="text-slate-200">{{ selectedManga.author }}</span></p>
+                                </div>
+                                
+                                <div class="flex items-center gap-2">
+                                    <button v-if="selectedManga.isCustom" @click="openAdminModal(selectedManga)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-violet-400 border border-violet-500/30 rounded-xl text-xs font-semibold">
+                                        <i class="fa-solid fa-pen-to-square"></i> Изменить
+                                    </button>
+
+                                    <button @click="toggleFavorite(selectedManga.id)" 
+                                            :class="isFavorite(selectedManga.id) ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-300 border-slate-700'"
+                                            class="px-4 py-2 rounded-xl text-xs sm:text-sm border flex items-center justify-center space-x-2 transition-all">
+                                        <i :class="isFavorite(selectedManga.id) ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"></i>
+                                        <span>{{ isFavorite(selectedManga.id) ? 'В закладках' : 'В закладки' }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Тэги -->
+                            <div class="flex flex-wrap gap-1.5 sm:gap-2 mt-4">
+                                <span v-for="tag in selectedManga.tags" 
+                                      :key="tag" 
+                                      class="px-2.5 py-1 bg-slate-800 border border-slate-700/50 rounded-lg text-xs font-medium text-violet-300">
+                                    {{ tag }}
+                                </span>
+                            </div>
+
+                            <div class="mt-4 sm:mt-6">
+                                <h3 class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-1 sm:mb-2">Описание</h3>
+                                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed max-h-36 overflow-y-auto pr-2">{{ selectedManga.description || 'Описание отсутствует.' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Список глав -->
+                <div class="bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-base sm:text-lg font-bold text-slate-100 flex items-center space-x-2">
+                            <i class="fa-solid fa-list text-violet-400"></i>
+                            <span>Список глав ({{ loadedChapters.length }})</span>
+                        </h2>
+                        <button v-if="selectedManga.isCustom" @click="openAddChapterModal(selectedManga)" class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-semibold">
+                            + Добавить главу
+                        </button>
+                    </div>
+
+                    <div v-if="isLoadingChapters" class="text-center py-8">
+                        <i class="fa-solid fa-spinner fa-spin text-2xl text-violet-500 mb-2"></i>
+                        <p class="text-xs text-slate-400">Загрузка списка глав с MangaDex...</p>
+                    </div>
+
+                    <div v-else-if="loadedChapters.length > 0" class="divide-y divide-slate-800/60 max-h-96 overflow-y-auto pr-1">
+                        <div v-for="(chap, idx) in loadedChapters" 
+                             :key="chap.id"
+                             @click="startReading(selectedManga, idx)"
+                             class="py-3 px-2 sm:px-4 rounded-xl flex items-center justify-between hover:bg-slate-800/50 cursor-pointer transition-colors group">
+                            <div class="flex items-center space-x-2 sm:space-x-3 truncate">
+                                <span class="text-xs text-slate-500 group-hover:text-violet-400 font-mono">#{{ idx + 1 }}</span>
+                                <span class="text-xs sm:text-sm text-slate-200 font-medium group-hover:text-white truncate">{{ chap.title }}</span>
+                            </div>
+                            <div class="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
+                                <button v-if="selectedManga.isCustom" @click.stop="openEditChapterModal(selectedManga, chap, idx)" class="p-1 text-slate-500 hover:text-violet-400 text-xs">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button v-if="selectedManga.isCustom" @click.stop="deleteChapter(selectedManga.id, idx)" class="p-1 text-slate-500 hover:text-red-400 text-xs">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-violet-400 transition-colors"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="text-center py-8 text-slate-500 text-sm">
+                        Главы отсутствуют. {{ selectedManga.isCustom ? 'Добавьте первую главу через панель администрирования!' : '' }}
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. АДМИН-ПАНЕЛЬ / CMS -->
+            <section v-if="currentView === 'admin'" class="space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-violet-400"></i>
+                            <span>Панель Управления Мангой (CMS)</span>
+                        </h1>
+                        <p class="text-xs text-slate-400 mt-1">Создавайте свои собственные манги, добавляйте главы и загружайте страницы</p>
+                    </div>
+
+                    <button @click="openAdminModal()" class="px-4 py-2.5 bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-violet-600/30 flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Создать Мангу</span>
+                    </button>
+                </div>
+
+                <!-- Таблица пользовательских манг -->
+                <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+                    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                        <h3 class="font-bold text-sm text-slate-200">Моя локальная манга ({{ customMangaList.length }})</h3>
+                        <span class="text-[11px] text-slate-500">Сохраняется автоматически в LocalStorage</span>
+                    </div>
+
+                    <div v-if="customMangaList.length > 0" class="divide-y divide-slate-800">
+                        <div v-for="manga in customMangaList" :key="manga.id" class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30">
+                            <div class="flex items-center space-x-4">
+                                <img :src="manga.cover" class="w-12 h-16 object-cover rounded-lg border border-slate-800" @error="$event.target.src='https://placehold.co/400x600/1e293b/8b5cf6?text=Нет+Обложки'">
+                                <div>
+                                    <h4 class="font-bold text-sm text-white">{{ manga.title }}</h4>
+                                    <p class="text-xs text-slate-400">Автор: {{ manga.author }} • Hlav: {{ manga.chapters ? manga.chapters.length : 0 }}</p>
+                                    <div class="flex gap-1 mt-1">
+                                        <span v-for="t in manga.tags" :key="t" class="px-1.5 py-0.5 bg-slate-800 text-[10px] text-violet-300 rounded">{{ t }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center space-x-2">
+                                <button @click="openAddChapterModal(manga)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg text-xs font-medium">
+                                    + Глава
+                                </button>
+                                <button @click="openAdminModal(manga)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-violet-400 rounded-lg text-xs font-medium">
+                                    <i class="fa-solid fa-pen"></i> Ред.
+                                </button>
+                                <button @click="deleteManga(manga.id)" class="px-3 py-1.5 bg-red-950/50 hover:bg-red-900/50 text-red-400 border border-red-800/40 rounded-lg text-xs font-medium">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="p-8 text-center text-slate-500 text-sm">
+                        У вас пока нет созданной пользовательской манги. Нажмите «Создать Мангу»!
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. ЧИТАЛКА (РИДЕР) -->
+            <section v-if="currentView === 'reader' && activeManga && activeChapter" 
+                     ref="readerContainer" 
+                     @mousemove="onUserActivity"
+                     @touchstart="onTouchStart"
+                     @touchend="onTouchEnd"
+                     :class="{ 'pseudo-fullscreen flex flex-col justify-between items-center': isCssFullscreen, 'space-y-3 sm:space-y-4 max-w-5xl mx-auto': !isFullscreen }"
+                     class="transition-all relative min-h-[80vh]">
+                
+                <!-- Панель управления ридера -->
+                <div :class="[
+                        isFullscreen 
+                            ? 'fixed top-2 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-xl bg-slate-900/90 backdrop-blur border border-slate-800/80 rounded-full px-3 py-1.5 shadow-2xl' 
+                            : 'sticky top-2 z-30 bg-slate-900/90 backdrop-blur border border-slate-800 rounded-xl p-2 sm:p-3 shadow-xl',
+                        isFullscreen && !showControls ? 'fullscreen-controls-hide' : 'fullscreen-controls-show'
+                     ]"
+                     class="flex items-center justify-between gap-2">
+                    
+                    <button @click="openMangaDetails(activeManga)" 
+                            class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors" 
+                            title="Назад">
+                        <i class="fa-solid fa-arrow-left text-xs sm:text-sm"></i>
+                    </button>
+
+                    <!-- Выбор главы -->
+                    <div class="flex items-center space-x-1 sm:space-x-2 flex-1 justify-center max-w-[200px] sm:max-w-xs">
+                        <button @click="prevChapter" 
+                                :disabled="currentChapterIndex === 0"
+                                class="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors text-xs">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        
+                        <select v-model="currentChapterIndex" @change="onChapterSelect" 
+                                class="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-violet-500 truncate w-full text-center">
+                            <option v-for="(chap, i) in loadedChapters" :key="chap.id" :value="i">
+                                Гл. {{ i + 1 }}
+                            </option>
+                        </select>
+
+                        <button @click="nextChapter" 
+                                :disabled="currentChapterIndex === loadedChapters.length - 1"
+                                class="p-1.5 rounded-lg bg-slate-800 text-slate-300 disabled:opacity-30 hover:bg-slate-700 transition-colors text-xs">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Опции: полноэкранный режим и scroll/single -->
+                    <div class="flex items-center space-x-1">
+                        <button @click="toggleFullscreen" 
+                                class="p-1.5 sm:p-2 rounded-lg text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+                                :title="isFullscreen ? 'Выйти (Esc)' : 'Во весь экран (F)'">
+                            <i :class="isFullscreen ? 'fa-solid fa-compress text-violet-400' : 'fa-solid fa-expand'"></i>
+                        </button>
+
+                        <button @click="toggleReadMode" 
+                                class="p-1.5 sm:p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1">
+                            <i :class="readerSettings.mode === 'single' ? 'fa-solid fa-file' : 'fa-solid fa-scroll'"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Загрузка страниц главы -->
+                <div v-if="isLoadingPages" class="text-center py-20 flex-1 flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-spinner fa-spin text-4xl text-violet-500 mb-3"></i>
+                    <p class="text-slate-400 text-sm">Загрузка изображений страницы из MangaDex API...</p>
+                </div>
+
+                <template v-else-if="activeChapter.pages && activeChapter.pages.length > 0">
+                    <!-- 1. ПОСТРАНИЧНЫЙ РЕЖИМ -->
+                    <div v-if="readerSettings.mode === 'single'" 
+                         :class="isFullscreen ? 'flex-1 w-full flex items-center justify-center p-1 sm:p-2' : 'flex flex-col items-center justify-center min-h-[65vh]'">
+                        <div class="relative bg-slate-900 rounded-xl overflow-hidden border border-slate-800/60 shadow-2xl flex items-center justify-center transition-all duration-200 w-full"
+                             :style="{ maxWidth: isFullscreen ? '100%' : '100%', maxHeight: isFullscreen ? '98vh' : 'auto' }">
+                            
+                            <img :src="activeChapter.pages[currentPageIndex]" 
+                                 :alt="'Страница ' + (currentPageIndex + 1)"
+                                 @dblclick="toggleFullscreen"
+                                 @error="$event.target.src='https://placehold.co/700x1000/1e293b/8b5cf6?text=Ошибка+Загрузки+Страницы'"
+                                 :class="isFullscreen ? 'max-h-[95vh] w-auto h-auto object-contain' : 'w-full h-auto object-contain max-h-[80vh]'"
+                                 class="cursor-pointer select-none">
+
+                            <div @click="prevPage" class="absolute left-0 top-0 bottom-0 w-1/3 cursor-pointer flex items-center justify-start pl-2">
+                                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-950/60 text-white flex items-center justify-center opacity-40 sm:opacity-0 hover:opacity-100 transition-opacity">
+                                    <i class="fa-solid fa-chevron-left text-xs sm:text-base"></i>
+                                </div>
+                            </div>
+                            <div @click="nextPage" class="absolute right-0 top-0 bottom-0 w-1/3 cursor-pointer flex items-center justify-end pr-2">
+                                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-950/60 text-white flex items-center justify-center opacity-40 sm:opacity-0 hover:opacity-100 transition-opacity">
+                                    <i class="fa-solid fa-chevron-right text-xs sm:text-base"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="!isFullscreen" class="flex items-center justify-center space-x-4 mt-4">
+                            <button @click="prevPage" :disabled="currentPageIndex === 0" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs sm:text-sm font-medium disabled:opacity-40 hover:bg-slate-800">
+                                Назад
+                            </button>
+                            <span class="text-xs sm:text-sm text-slate-400">
+                                <strong class="text-white">{{ currentPageIndex + 1 }}</strong> / {{ activeChapter.pages.length }}
+                            </span>
+                            <button @click="nextPage" :disabled="currentPageIndex === activeChapter.pages.length - 1" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs sm:text-sm font-medium disabled:opacity-40 hover:bg-slate-800">
+                                Вперед
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. ВЕРТИКАЛЬНЫЙ РЕЖИМ (ЛЕНТА) -->
+                    <div v-else class="flex flex-col items-center space-y-2 py-2 w-full">
+                        <div v-for="(pageUrl, pIdx) in activeChapter.pages" 
+                             :key="pIdx"
+                             class="w-full max-w-3xl bg-slate-900 rounded-lg overflow-hidden border border-slate-800/50">
+                            <img :src="pageUrl" 
+                                 :alt="'Страница ' + (pIdx + 1)" 
+                                 @dblclick="toggleFullscreen"
+                                 @error="$event.target.src='https://placehold.co/700x1000/1e293b/8b5cf6?text=Ошибка+Загрузки+Страницы'"
+                                 class="w-full h-auto block cursor-pointer select-none">
+                        </div>
+                    </div>
+                </template>
+
+                <div v-else class="text-center py-20 text-slate-400 text-sm">
+                    Страницы для этой главы отсутствуют.
+                </div>
+
+                <!-- Нижний Индикатор страниц для Fullscreen -->
+                <div v-if="isFullscreen && activeChapter && activeChapter.pages" 
+                     :class="showControls ? 'opacity-90' : 'opacity-20 hover:opacity-100'"
+                     class="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 bg-slate-950/80 backdrop-blur border border-slate-800 text-slate-300 text-[11px] px-3 py-1 rounded-full shadow-lg transition-all duration-300">
+                    <span>Гл. {{ currentChapterIndex + 1 }}</span>
+                    <span class="mx-1 text-slate-600">•</span>
+                    <span>Стр. <strong class="text-white">{{ currentPageIndex + 1 }}</strong> / {{ activeChapter.pages.length }}</span>
+                </div>
+            </section>
+        </main>
+
+        <!-- МОДАЛЬНОЕ ОКНО АДМИНИСТРИРОВАНИЯ (МАНГА) -->
+        <div v-if="showMangaModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+                <h3 class="text-lg font-bold text-white">{{ editingMangaId ? 'Редактировать Мангу' : 'Создать Новую Мангу' }}</h3>
+                
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Название Манги</label>
+                        <input v-model="mangaForm.title" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Автор</label>
+                            <input v-model="mangaForm.author" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Жанры (через запятую)</label>
+                            <input v-model="mangaForm.tags" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none" placeholder="Сёнэн, Экшен">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">URL Обложки</label>
+                        <input v-model="mangaForm.cover" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none" placeholder="https://...">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Описание</label>
+                        <textarea v-model="mangaForm.description" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button @click="showMangaModal = false" class="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs font-semibold">Отмена</button>
+                    <button @click="saveMangaForm" class="px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-semibold">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- МОДАЛЬНОЕ ОКНО АДМИНИСТРИРОВАНИЯ (ГЛАВА И СТРАНИЦЫ) -->
+        <div v-if="showChapterModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+                <h3 class="text-lg font-bold text-white">{{ editingChapterIndex !== null ? 'Редактировать Главу' : 'Добавить Главу' }}</h3>
+                
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Название главы</label>
+                        <input v-model="chapterForm.title" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none">
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-slate-400">Ссылки на страницы (Каждая ссылка с новой строки)</label>
+                            <label class="text-violet-400 cursor-pointer hover:underline">
+                                Загрузить файлы
+                                <input type="file" multiple accept="image/*" @change="handleFileUpload" class="hidden">
+                            </label>
+                        </div>
+                        <textarea v-model="chapterForm.pagesText" rows="6" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-violet-500 outline-none font-mono" placeholder="https://example.com/page1.jpg&#10;https://example.com/page2.jpg"></textarea>
+                    </div>
+
+                    <button @click="generateDemoPagesForForm" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold">
+                        + Сгенерировать 3 тестовые страницы (Canvas)
+                    </button>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button @click="showChapterModal = false" class="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs font-semibold">Отмена</button>
+                    <button @click="saveChapterForm" class="px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-semibold">Сохранить Главу</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Мобильное нижнее меню -->
+        <div v-if="currentView !== 'reader'" class="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-slate-800 flex items-center justify-around py-2">
+            <button @click="setView('catalog')" :class="currentView === 'catalog' ? 'text-violet-400' : 'text-slate-400'" class="flex flex-col items-center space-y-1 text-xs">
+                <i class="fa-solid fa-compass text-base"></i>
+                <span>Каталог</span>
+            </button>
+            <button @click="setView('my_manga')" :class="currentView === 'my_manga' ? 'text-violet-400' : 'text-slate-400'" class="flex flex-col items-center space-y-1 text-xs">
+                <i class="fa-solid fa-layer-group text-base"></i>
+                <span>Моя</span>
+            </button>
+            <button @click="setView('favorites')" :class="currentView === 'favorites' ? 'text-violet-400' : 'text-slate-400'" class="flex flex-col items-center space-y-1 text-xs">
+                <i class="fa-solid fa-bookmark text-base"></i>
+                <span>Закладки</span>
+            </button>
+            <button @click="setView('admin')" :class="currentView === 'admin' ? 'text-violet-400' : 'text-slate-400'" class="flex flex-col items-center space-y-1 text-xs">
+                <i class="fa-solid fa-gear text-base"></i>
+                <span>CMS</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Vue App Script -->
+    <script>
+        const { createApp } = Vue;
+
+        const generateCanvasPage = (title, chapterTitle, pageNum) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 700;
+            canvas.height = 1000;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 700, 1000);
+            grad.addColorStop(0, '#0f172a');
+            grad.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 700, 1000);
+
+            ctx.strokeStyle = '#6d28d9';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(30, 30, 640, 940);
+
+            ctx.fillStyle = '#a78bfa';
+            ctx.font = 'bold 28px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, 350, 150);
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '20px Inter, sans-serif';
+            ctx.fillText(chapterTitle, 350, 200);
+
+            ctx.fillStyle = '#06b6d4';
+            ctx.font = 'bold 24px Inter, sans-serif';
+            ctx.fillText(`Страница ${pageNum}`, 350, 880);
+
+            return canvas.toDataURL();
+        };
+
+        const INITIAL_CUSTOM_MANGA = [
+            {
+                id: 'custom-1',
+                isCustom: true,
+                title: 'Моя Первая Манга',
+                author: 'Ваше Имя',
+                rating: '5.0',
+                tags: ['Вебтун', 'Приключения'],
+                cover: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&q=80',
+                description: 'Это пользовательская манга, которую вы можете редактировать или удалять через админку CMS!',
+                chapters: [
+                    { 
+                        id: 'c1', 
+                        title: 'Глава 1: Начало', 
+                        pages: [
+                            generateCanvasPage('Моя Первая Манга', 'Глава 1', 1),
+                            generateCanvasPage('Моя Первая Манга', 'Глава 1', 2)
+                        ] 
+                    }
+                ]
+            }
+        ];
+
+        createApp({
+            data() {
+                return {
+                    currentView: 'catalog',
+                    searchQuery: '',
+                    isLoading: false,
+                    isLoadingChapters: false,
+                    isLoadingPages: false,
+                    mangadexList: [],
+                    customMangaList: JSON.parse(localStorage.getItem('mv_custom_manga') || JSON.stringify(INITIAL_CUSTOM_MANGA)),
+                    selectedManga: null,
+                    loadedChapters: [],
+                    activeManga: null,
+                    currentChapterIndex: 0,
+                    currentPageIndex: 0,
+                    favorites: JSON.parse(localStorage.getItem('mv_favorites') || '[]'),
+                    readingProgress: JSON.parse(localStorage.getItem('mv_progress') || '{}'),
+                    isNativeFullscreen: false,
+                    isCssFullscreen: false,
+                    showControls: true,
+                    controlsTimeout: null,
+                    touchStartX: 0,
+                    touchEndX: 0,
+                    readerSettings: { mode: 'single', zoom: 100 },
+                    
+                    // CMS Modal States
+                    showMangaModal: false,
+                    editingMangaId: null,
+                    mangaForm: { title: '', author: '', cover: '', tags: '', description: '' },
+                    
+                    showChapterModal: false,
+                    editingChapterMangaId: null,
+                    editingChapterIndex: null,
+                    chapterForm: { title: '', pagesText: '' }
+                }
+            },
+            mounted() {
+                this.fetchMangaDexList();
+                document.addEventListener('fullscreenchange', this.onFullscreenChange);
+                document.addEventListener('webkitfullscreenchange', this.onFullscreenChange);
+                document.addEventListener('mozfullscreenchange', this.onFullscreenChange);
+                document.addEventListener('MSFullscreenChange', this.onFullscreenChange);
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeUnmount() {
+                document.removeEventListener('fullscreenchange', this.onFullscreenChange);
+                document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
+                document.removeEventListener('mozfullscreenchange', this.onFullscreenChange);
+                document.removeEventListener('MSFullscreenChange', this.onFullscreenChange);
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            computed: {
+                isFullscreen() {
+                    return this.isNativeFullscreen || this.isCssFullscreen;
+                },
+                displayedMangaList() {
+                    if (this.currentView === 'my_manga') {
+                        return this.customMangaList;
+                    }
+                    if (this.currentView === 'favorites') {
+                        const all = [...this.customMangaList, ...this.mangadexList];
+                        return all.filter(m => this.favorites.includes(m.id));
+                    }
+                    return this.mangadexList;
+                },
+                activeChapter() {
+                    if (!this.loadedChapters || !this.loadedChapters[this.currentChapterIndex]) {
+                        return null;
+                    }
+                    return this.loadedChapters[this.currentChapterIndex];
+                }
+            },
+            methods: {
+                setView(view) {
+                    this.currentView = view;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (view === 'catalog' && this.mangadexList.length === 0) {
+                        this.fetchMangaDexList();
+                    }
+                },
+
+                // API Integration MangaDex
+                async fetchMangaDexList() {
+                    this.isLoading = true;
+                    try {
+                        let url = 'https://api.mangadex.org/manga?limit=20&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive';
+                        if (this.searchQuery.trim()) {
+                            url += `&title=${encodeURIComponent(this.searchQuery.trim())}`;
+                        }
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        
+                        this.mangadexList = data.data.map(item => {
+                            const attrs = item.attributes;
+                            const title = attrs.title.en || attrs.title['ja-ro'] || Object.values(attrs.title)[0] || 'Без названия';
+                            const desc = attrs.description ? (attrs.description.ru || attrs.description.en || '') : '';
+                            
+                            let coverFileName = '';
+                            const coverRel = item.relationships.find(r => r.type === 'cover_art');
+                            if (coverRel && coverRel.attributes) {
+                                coverFileName = coverRel.attributes.fileName;
+                            }
+                            const coverUrl = coverFileName 
+                                ? `https://uploads.mangadex.org/covers/${item.id}/${coverFileName}.256.jpg`
+                                : 'https://placehold.co/400x600/1e293b/8b5cf6?text=Нет+Обложки';
+
+                            const authorRel = item.relationships.find(r => r.type === 'author');
+                            const authorName = authorRel && authorRel.attributes ? authorRel.attributes.name : 'MangaDex';
+
+                            const tags = attrs.tags ? attrs.tags.slice(0, 3).map(t => t.attributes.name.en) : [];
+
+                            return {
+                                id: item.id,
+                                isCustom: false,
+                                title,
+                                author: authorName,
+                                cover: coverUrl,
+                                description: desc,
+                                tags,
+                                chapters: null
+                            };
+                        });
+                    } catch (e) {
+                        console.error('Ошибка MangaDex API:', e);
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async openMangaDetails(manga) {
+                    this.selectedManga = manga;
+                    this.setView('details');
+
+                    if (manga.isCustom) {
+                        this.loadedChapters = manga.chapters || [];
+                    } else {
+                        this.isLoadingChapters = true;
+                        try {
+                            const res = await fetch(`https://api.mangadex.org/manga/${manga.id}/feed?translatedLanguage[]=en&translatedLanguage[]=ru&order[chapter]=asc&limit=100`);
+                            const data = await res.json();
+                            this.loadedChapters = data.data.map(ch => ({
+                                id: ch.id,
+                                title: `Глава ${ch.attributes.chapter || ''}: ${ch.attributes.title || ''}`,
+                                pages: null
+                            }));
+                        } catch (e) {
+                            this.loadedChapters = [];
+                        } finally {
+                            this.isLoadingChapters = false;
+                        }
+                    }
+                },
+
+                async startReading(manga, chapterIdx = 0) {
+                    this.activeManga = manga;
+                    this.currentChapterIndex = chapterIdx;
+                    this.currentPageIndex = 0;
+                    this.setView('reader');
+
+                    await this.loadChapterPages();
+                },
+
+                async loadChapterPages() {
+                    const chapter = this.loadedChapters[this.currentChapterIndex];
+                    if (!chapter) return;
+
+                    if (this.activeManga.isCustom || (chapter.pages && chapter.pages.length > 0)) {
+                        return;
+                    }
+
+                    this.isLoadingPages = true;
+                    try {
+                        const res = await fetch(`https://api.mangadex.org/at-home/server/${chapter.id}`);
+                        const data = await res.json();
+                        const baseUrl = data.baseUrl;
+                        const hash = data.chapter.hash;
+                        const pageFiles = data.chapter.data;
+
+                        chapter.pages = pageFiles.map(file => `${baseUrl}/data/${hash}/${file}`);
+                    } catch (e) {
+                        chapter.pages = [];
+                    } finally {
+                        this.isLoadingPages = false;
+                    }
+                },
+
+                async onChapterSelect() {
+                    this.currentPageIndex = 0;
+                    await this.loadChapterPages();
+                },
+
+                async nextChapter() {
+                    if (this.currentChapterIndex < this.loadedChapters.length - 1) {
+                        this.currentChapterIndex++;
+                        this.currentPageIndex = 0;
+                        await this.loadChapterPages();
+                    }
+                },
+
+                async prevChapter() {
+                    if (this.currentChapterIndex > 0) {
+                        this.currentChapterIndex--;
+                        this.currentPageIndex = 0;
+                        await this.loadChapterPages();
+                    }
+                },
+
+                // CMS / АДМИНКА МЕТОДЫ
+                saveCustomMangaToStorage() {
+                    localStorage.setItem('mv_custom_manga', JSON.stringify(this.customMangaList));
+                },
+
+                openAdminModal(manga = null) {
+                    if (manga) {
+                        this.editingMangaId = manga.id;
+                        this.mangaForm = {
+                            title: manga.title,
+                            author: manga.author,
+                            cover: manga.cover,
+                            tags: manga.tags ? manga.tags.join(', ') : '',
+                            description: manga.description
+                        };
+                    } else {
+                        this.editingMangaId = null;
+                        this.mangaForm = { title: '', author: '', cover: '', tags: '', description: '' };
+                    }
+                    this.showMangaModal = true;
+                },
+
+                saveMangaForm() {
+                    const tagsArray = this.mangaForm.tags.split(',').map(t => t.trim()).filter(Boolean);
+                    if (this.editingMangaId) {
+                        const m = this.customMangaList.find(x => x.id === this.editingMangaId);
+                        if (m) {
+                            m.title = this.mangaForm.title;
+                            m.author = this.mangaForm.author;
+                            m.cover = this.mangaForm.cover;
+                            m.tags = tagsArray;
+                            m.description = this.mangaForm.description;
+                        }
+                    } else {
+                        const newManga = {
+                            id: 'custom-' + Date.now(),
+                            isCustom: true,
+                            title: this.mangaForm.title || 'Без названия',
+                            author: this.mangaForm.author || 'Пользователь',
+                            cover: this.mangaForm.cover || 'https://placehold.co/400x600/1e293b/8b5cf6?text=Обложка',
+                            tags: tagsArray,
+                            description: this.mangaForm.description,
+                            chapters: []
+                        };
+                        this.customMangaList.push(newManga);
+                    }
+                    this.saveCustomMangaToStorage();
+                    this.showMangaModal = false;
+                },
+
+                deleteManga(mangaId) {
+                    if (confirm('Удалить эту мангу и все её главы?')) {
+                        this.customMangaList = this.customMangaList.filter(m => m.id !== mangaId);
+                        this.saveCustomMangaToStorage();
+                    }
+                },
+
+                openAddChapterModal(manga) {
+                    this.editingChapterMangaId = manga.id;
+                    this.editingChapterIndex = null;
+                    this.chapterForm = { title: '', pagesText: '' };
+                    this.showChapterModal = true;
+                },
+
+                openEditChapterModal(manga, chapter, idx) {
+                    this.editingChapterMangaId = manga.id;
+                    this.editingChapterIndex = idx;
+                    this.chapterForm = {
+                        title: chapter.title,
+                        pagesText: chapter.pages ? chapter.pages.join('\n') : ''
+                    };
+                    this.showChapterModal = true;
+                },
+
+                saveChapterForm() {
+                    const pages = this.chapterForm.pagesText.split('\n').map(p => p.trim()).filter(Boolean);
+                    const manga = this.customMangaList.find(m => m.id === this.editingChapterMangaId);
+                    if (!manga) return;
+
+                    if (!manga.chapters) manga.chapters = [];
+
+                    if (this.editingChapterIndex !== null) {
+                        manga.chapters[this.editingChapterIndex] = {
+                            id: manga.chapters[this.editingChapterIndex].id,
+                            title: this.chapterForm.title || 'Без названия',
+                            pages
+                        };
+                    } else {
+                        manga.chapters.push({
+                            id: 'chap-' + Date.now(),
+                            title: this.chapterForm.title || `Глава ${manga.chapters.length + 1}`,
+                            pages
+                        });
+                    }
+
+                    this.saveCustomMangaToStorage();
+                    if (this.selectedManga && this.selectedManga.id === manga.id) {
+                        this.loadedChapters = manga.chapters;
+                    }
+                    this.showChapterModal = false;
+                },
+
+                deleteChapter(mangaId, idx) {
+                    const manga = this.customMangaList.find(m => m.id === mangaId);
+                    if (manga && manga.chapters) {
+                        manga.chapters.splice(idx, 1);
+                        this.saveCustomMangaToStorage();
+                        this.loadedChapters = manga.chapters;
+                    }
+                },
+
+                generateDemoPagesForForm() {
+                    const title = this.chapterForm.title || 'Тестовая Глава';
+                    const p1 = generateCanvasPage('Пользовательская Манга', title, 1);
+                    const p2 = generateCanvasPage('Пользовательская Манга', title, 2);
+                    const p3 = generateCanvasPage('Пользовательская Манга', title, 3);
+                    
+                    const existing = this.chapterForm.pagesText ? this.chapterForm.pagesText + '\n' : '';
+                    this.chapterForm.pagesText = existing + `${p1}\n${p2}\n${p3}`;
+                },
+
+                handleFileUpload(e) {
+                    const files = e.target.files;
+                    if (!files) return;
+
+                    Array.from(files).forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            const dataUrl = evt.target.result;
+                            this.chapterForm.pagesText += (this.chapterForm.pagesText ? '\n' : '') + dataUrl;
+                        };
+                        reader.readAsDataURL(file);
+                    });
+                },
+
+                // ЗАКЛАДКИ И ВСПОМОГАТЕЛЬНЫЕ
+                toggleFavorite(mangaId) {
+                    const idx = this.favorites.indexOf(mangaId);
+                    if (idx > -1) this.favorites.splice(idx, 1);
+                    else this.favorites.push(mangaId);
+                    localStorage.setItem('mv_favorites', JSON.stringify(this.favorites));
+                },
+
+                isFavorite(mangaId) {
+                    return this.favorites.includes(mangaId);
+                },
+
+                // РЕДАКТОР & FULLSCREEN CONTROL
+                onUserActivity() {
+                    this.showControls = true;
+                    if (this.controlsTimeout) clearTimeout(this.controlsTimeout);
+                    if (this.isFullscreen) {
+                        this.controlsTimeout = setTimeout(() => {
+                            if (this.isFullscreen) this.showControls = false;
+                        }, 2500);
+                    }
+                },
+
+                onTouchStart(e) {
+                    this.onUserActivity();
+                    if (e.touches && e.touches.length > 0) {
+                        this.touchStartX = e.touches[0].clientX;
+                    }
+                },
+
+                onTouchEnd(e) {
+                    if (e.changedTouches && e.changedTouches.length > 0) {
+                        this.touchEndX = e.changedTouches[0].clientX;
+                        const diff = this.touchStartX - this.touchEndX;
+                        if (Math.abs(diff) > 50) {
+                            if (diff > 0) this.nextPage();
+                            else this.prevPage();
+                        }
+                    }
+                },
+
+                async toggleFullscreen() {
+                    if (this.isCssFullscreen) {
+                        this.isCssFullscreen = false;
+                        this.showControls = true;
+                        return;
+                    }
+                    const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+                    if (fsElement) {
+                        if (document.exitFullscreen) await document.exitFullscreen().catch(() => {});
+                        this.isNativeFullscreen = false;
+                        this.showControls = true;
+                        return;
+                    }
+                    const elem = this.$refs.readerContainer || document.documentElement;
+                    try {
+                        if (elem.requestFullscreen) await elem.requestFullscreen();
+                        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+                        else throw new Error('Blocked');
+                    } catch (err) {
+                        this.isCssFullscreen = true;
+                    }
+                    this.onUserActivity();
+                },
+
+                onFullscreenChange() {
+                    this.isNativeFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                    if (!this.isNativeFullscreen) {
+                        this.isCssFullscreen = false;
+                        this.showControls = true;
+                    }
+                },
+
+                prevPage() {
+                    if (this.currentPageIndex > 0) this.currentPageIndex--;
+                },
+
+                nextPage() {
+                    if (this.activeChapter && this.activeChapter.pages && this.currentPageIndex < this.activeChapter.pages.length - 1) {
+                        this.currentPageIndex++;
+                    } else if (this.currentChapterIndex < this.loadedChapters.length - 1) {
+                        this.nextChapter();
+                    }
+                },
+
+                handleKeyDown(e) {
+                    if (this.currentView === 'reader') {
+                        if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') this.toggleFullscreen();
+                        else if (e.key === 'ArrowRight') this.nextPage();
+                        else if (e.key === 'ArrowLeft') this.prevPage();
+                        else if (e.key === 'Escape' && this.isCssFullscreen) this.isCssFullscreen = false;
+                    }
+                },
+
+                toggleReadMode() {
+                    this.readerSettings.mode = this.readerSettings.mode === 'single' ? 'scroll' : 'single';
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
