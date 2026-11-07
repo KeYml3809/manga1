@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="ru" class="dark h-full">
 <head>
+    <script>
+  (function() {
+    const PASS = "foxsuka0804"; // Укажите ваш пароль
+    if (localStorage.getItem("manga_auth") !== "true") {
+      let input = prompt("Введите пароль для доступа к сайту:");
+      if (input === PASS) {
+        localStorage.setItem("manga_auth", "true");
+      } else {
+        alert("Неверный пароль!");
+        document.write("<h2 style='text-align:center;margin-top:50px;color:red;'>Доступ запрещен</h2>");
+        window.stop();
+      }
+    }
+  })();
+</script>
     <meta name="robots" content="noindex, nofollow">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
